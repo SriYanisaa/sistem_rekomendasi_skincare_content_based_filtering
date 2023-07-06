@@ -1,0 +1,28 @@
+@startuml
+
+title Implementasi Sistem Rekomendasi dengan Content-Based Filtering
+
+skinparam packageStyle rectangle
+
+actor User
+
+rectangle "Website" as website
+rectangle "Crawling Data" as crawler
+rectangle "Preprocessing" as preprocessing
+rectangle "TF-IDF Weighting" as tfidf
+rectangle "Cosine Similarity" as cosine
+rectangle "Content-Based Filtering" as filtering
+rectangle "Web Rekomendasi" as hasil
+rectangle "D3.js" as d3
+
+User -> hasil : Memilih produk dan jumlah rekomendasi
+hasil -> filtering : Mengirim data produk yang dipilih
+website --> crawler : Crawling data dari Female Daily
+crawler --> preprocessing
+preprocessing --> tfidf
+tfidf --> cosine
+filtering -> cosine : Mencari kemiripan nilai cosine similarity
+cosine --> hasil : Menghasilkan rekomendasi
+hasil -> d3 : Menampilkan visualisasi
+
+@enduml

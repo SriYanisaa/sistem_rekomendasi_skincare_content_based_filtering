@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Product Recommender</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            border: 1px solid black;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        .form-floating {
+            position: relative;
+            margin-bottom: 1rem;
+        }
+
+        .form-floating input {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: none;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .form-floating label {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            padding: 10px;
+            transition: 0.2s ease all;
+        }
+
+        .form-floating input:focus {
+            outline: none;
+            border-color: #aaa;
+        }
+
+        .form-floating input:focus + label,
+        .form-floating input:not(:placeholder-shown) + label {
+            top: -20px;
+            left: 0;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .center-content {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+        }
+
+        .center-content button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #2a536e;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .center-content button:hover {
+            background-color: #2a536e;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            font-size: 16px;
+            text-align: center;
+            text-decoration: none;
+            background-color: #2a536e;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .button:hover {
+            background-color: #2a536e;
+        }
+
+        .button:active {
+            background-color: #2a536e;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) inset;
+        }
+
+        .bar {
+            outline: 1px solid black;
+        }
+
+        .legend-container {
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(255, 255, 255, 0.781);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .legend-background {
+            stroke: #ddd;
+            stroke-width: 1px;
+        }
+
+        .legend-color {
+            stroke: none;
+        }
+
+        .legend rect {
+            stroke: none;
+            fill-opacity: 0.8;
+        }
+
+        .legend text {
+            font-size: 14px;
+            fill: #333;
+        }
+
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+        }
+
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 220px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/selectize.js/0.13.3/css/selectize.default.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/selectize.js/0.13.3/js/standalone/selectize.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/6.7.0/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-tip/0.9.1/d3-tip.min.js"></script>
+</head>
+<body>
+    <h1>Select Products</h1>
+    <form id="recommendationForm">
+        <div class="input-container form-floating">
+            <select id="productSelect" name="product" multiple>
+                {% for product in products|sort %}
+                <option value="{{ product }}">{{ product }}</option>
+                {% endfor %}
+            </select>
+            <label for="productSelect">Select Products</label>
+        </div>
+        <div class="input-container form-floating">
+            <input type="number" id="numRecommendations" min="1" max="10" value="5" step="1">
+            <label for="numRecommendations">Number of Recommendations</label>
+        </div>
+        <br>
+        <div class="center-content">
+            <button class="button" onclick="sendRecommendation(event)">Recommend</button>
+        </div>
+    </form>
+
+    <table id="recommendationsTable">
+        <thead>
+            <tr>
+                <th>Product Name</th>
+                <th>Product Brand</th>
+                <th>Category</th>
+                <th>Subcategory</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <div id="chartContainer"></div>
+
+    <script>
+        $(document).ready(function() {
+            $('#productSelect').selectize({
+                plugins: ['remove_button'],
+                delimiter: ',',
+                persist: false,
+                create: false
+            });
+        });
+
+        function sendRecommendation(event) {
+            event.preventDefault(); // Mencegah pengiriman form secara default
+
+            const selectedProducts = $('#productSelect').val();
+            const numRecommendations = parseInt(document.getElementById('numRecommendations').value);
+
+            const recommendation = {
+                product_names: selectedProducts,
+                sum_skincare: numRecommendations
+            };
+
+            fetch('/recommend', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(recommendation)
+            })
+                .then(response => response.json())
+                .then(data => displayRecommendations(data, numRecommendations, recommendation.product_names)); // Menambahkan parameter product_names
+        }
+
+        function displayRecommendations(recommendations, numRecommendations, selectedProducts) {
+            const tableBody = document.querySelector('#recommendationsTable tbody');
+            tableBody.innerHTML = '';
+
+            const isRecommended = recommendations.map(recommendation => recommendation.is_recommend);
+
+            for (let i = 0; i < recommendations.length; i++) {
+                if (i === numRecommendations) {
+                    break;
+                }
+
+                const recommendation = recommendations[i];
+
+                const row = document.createElement('tr');
+
+                const productNameCell = document.createElement('td');
+                productNameCell.textContent = recommendation.product_name;
+                row.appendChild(productNameCell);
+
+                const productBrandCell = document.createElement('td');
+                productBrandCell.textContent = recommendation.product_brand;
+                row.appendChild(productBrandCell);
+
+                const categoryCell = document.createElement('td');
+                categoryCell.textContent = recommendation.category;
+                row.appendChild(categoryCell);
+
+                const subcategoryCell = document.createElement('td');
+                subcategoryCell.textContent = recommendation.subcategory;
+                row.appendChild(subcategoryCell);
+
+                tableBody.appendChild(row);
+            }
+
+            // Menghapus visualisasi sebelumnya (jika ada)
+            const chartContainer = document.querySelector('#chartContainer');
+            chartContainer.innerHTML = '';
+
+            // Mendapatkan data nilai cosine similarity dan rating dari rekomendasi
+            const cosineSimilarities = recommendations.map(recommendation => recommendation.cosine_similarity);
+            const ratings = recommendations.map(recommendation => recommendation.star_rating);
+
+            const width = chartContainer.clientWidth;
+            const height = 700;
+            const margin = { top: 120, right: 60, bottom: 300, left: 90 };
+
+            // Membuat SVG container untuk diagram batang
+            const svg = d3.select('#chartContainer')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+            
+            // Menambahkan judul visualisasi
+            const chartTitleX = (width - margin.left - margin.right) / 2 + margin.left;
+            const chartTitleY = margin.top - 40;
+
+            svg.append('text')
+                .attr('x', chartTitleX)
+                .attr('y', chartTitleY)
+                .attr('text-anchor', 'middle')
+                .text('Visualisasi Produk dan Cosine Similarity')
+                .attr('font-weight', 'bold')
+                .attr('font-size', '16px');
+
+            // Menentukan skala sumbu x dan y
+            const x = d3.scaleBand()
+                .domain(recommendations.map((_, i) => i))
+                .range([margin.left, width - margin.right])
+                .padding(0.1);
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(cosineSimilarities)])
+                .range([height - margin.bottom, margin.top]);
+
+            // Menambahkan batang diagram batang
+            svg.selectAll('rect')
+                .data(cosineSimilarities)
+                .enter()
+                .append('rect')
+                .attr('x', (d, i) => x(i))
+                .attr('y', d => y(d))
+                .attr('width', x.bandwidth())
+                .attr('height', d => height - margin.bottom - y(d))
+                .attr('fill', (d, i) => (isRecommended[i] === 'Yes') ? 'green' : 'red')
+                .attr('class', 'bar')
+                .append('title')
+                .text((d, i) => `Product Name: ${recommendations[i].product_name}\nCosine Similarity: ${d}\nRating: ${ratings[i]}`);
+            
+            // Menambahkan sumbu x
+            const xAxis = svg.append('g')
+                .attr('transform', `translate(0, ${height - margin.bottom})`)
+                .call(d3.axisBottom(x).tickFormat((_, i) => recommendations[i].product_name))
+                .selectAll('text')
+                .style('text-anchor', 'end')
+                .attr('transform', 'rotate(-45)')
+                .attr('dy', '0.35em')
+                .attr('dx', '-0.8em')
+                .style('font-size', '12px');
+
+            // Menentukan posisi judul sumbu x
+            const xAxisTitleX = (width - margin.left - margin.right) / 2 + margin.left;
+            const xAxisTitleY = height - margin.bottom + 250;
+
+            // Menambahkan judul sumbu x
+            svg.append('text')
+                .attr('x', xAxisTitleX)
+                .attr('y', xAxisTitleY)
+                .attr('text-anchor', 'middle')
+                .text('Produk Rekomendasi')
+                .attr('font-weight', 'bold')
+                .attr('font-size', '14px');
+
+            // Memastikan tampilan teks sumbu X agar tidak saling tumpuk
+            xAxis.attr('dy', '15px')
+                .style('text-anchor', 'end');
+
+            // Menambahkan sumbu y
+            svg.append('g')
+                .attr('transform', `translate(${margin.left}, 0)`)
+                .call(d3.axisLeft(y));
+
+            // Menentukan posisi judul sumbu y
+            const yAxisTitleX = margin.left - 60;
+            const yAxisTitleY = (height - margin.top - margin.bottom) / 2 + margin.top;
+
+            // Menambahkan judul sumbu y
+            svg.append('text')
+                .attr('x', yAxisTitleX)
+                .attr('y', yAxisTitleY)
+                .attr('text-anchor', 'middle')
+                .text('Nilai Cosine')
+                .attr('transform', `rotate(-90, ${yAxisTitleX}, ${yAxisTitleY})`)
+                .attr('font-weight', 'bold')
+                .attr('font-size', '14px');
+
+            // Membuat elemen legend container
+            const legendContainer = svg.append('g')
+                .attr('class', 'legend-container')
+                .attr('transform', `translate(${width - margin.right - 200}, ${margin.top})`);
+
+            // Membuat elemen latar belakang kotak putih
+            const legendBackground = legendContainer.append('rect')
+                .attr('class', 'legend-background')
+                .attr('width', 180)
+                .attr('height', 70)
+                .attr('fill', '#fff')
+                .attr('opacity', 0.9)
+                .attr('rx', 5)
+                .attr('ry', 5);
+
+            // Membuat elemen persegi panjang untuk warna hijau (recommended)
+            const recommendedLegend = legendContainer.append('g')
+                .attr('class', 'legend');
+
+            recommendedLegend.append('rect')
+                .attr('class', 'legend-color')
+                .attr('x', 10)
+                .attr('y', 15)
+                .attr('width', 20)
+                .attr('height', 20)
+                .attr('fill', 'green');
+
+            recommendedLegend.append('text')
+                .attr('class', 'legend-text')
+                .attr('x', 40)
+                .attr('y', 30)
+                .text('Recommended');
+
+            // Membuat elemen persegi panjang untuk warna merah (tidak recommended)
+            const notRecommendedLegend = legendContainer.append('g')
+                .attr('class', 'legend')
+                .attr('transform', 'translate(0, 35)');
+
+            notRecommendedLegend.append('rect')
+                .attr('class', 'legend-color')
+                .attr('x', 10)
+                .attr('y', 0)
+                .attr('width', 20)
+                .attr('height', 20)
+                .attr('fill', 'red');
+
+            notRecommendedLegend.append('text')
+                .attr('class', 'legend-text')
+                .attr('x', 40)
+                .attr('y', 15)
+                .text('Not Recommended');
+        }
+    </script>
+</body>
+</html>
